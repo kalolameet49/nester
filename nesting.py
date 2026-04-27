@@ -17,85 +17,57 @@ class ProNester:
         self.generations = generations
         self.mutation_rate = mutation_rate
 
-    # ---------- ROTATIONS ----------
     def generate_rotations(self, part):
-        angles = [0, 90, 180, 270]
-        angles += [random.randint(0, 360) for _ in range(2)]
-
+        angles = [0, 90, 180, 270] + [random.randint(0, 360) for _ in range(2)]
         result = []
+
         for a in angles:
             r = rotate(part, a, origin='centroid')
             minx, miny, _, _ = r.bounds
-            r = translate(r, -minx, -miny)
-            result.append(r)
+            result.append(translate(r, -minx, -miny))
 
         return result
 
-    # ---------- NFP APPROX ----------
-    def no_fit_check(self, part, placed):
-        for p in placed:
-            if part.buffer(self.gap).intersects(p):
-                return False
-        return True
+    def no_fit(self, part, placed):
+        return not any(part.buffer(self.gap).intersects(p) for p in placed)
 
-    # ---------- HOLE NESTING ----------
-    def try_place_inside(self, part, placed):
+    def try_hole(self, part, placed):
 
         for p in placed:
             if not isinstance(p, Polygon):
                 continue
 
-            holes = list(p.interiors)
-
-            for hole in holes:
+            for hole in p.interiors:
                 hole_poly = Polygon(hole)
 
-                if hole_poly.area > part.area * 1.1:
-
-                    moved = translate(part,
-                                      hole_poly.bounds[0],
-                                      hole_poly.bounds[1])
+                if hole_poly.area > part.area:
+                    moved = translate(part, hole_poly.bounds[0], hole_poly.bounds[1])
 
                     if hole_poly.contains(moved):
                         return moved
-
         return None
 
-    # ---------- CANDIDATES ----------
-    def get_candidates(self, placed):
-        pts = [(self.margin, self.margin)]
+    def place(self, part, placed):
 
-        for p in placed:
-            minx, miny, maxx, maxy = p.bounds
-            pts.append((maxx, miny))
-            pts.append((minx, maxy))
-
-        random.shuffle(pts)
-        return pts
-
-    # ---------- PLACE ----------
-    def place_part(self, part, placed):
-
-        # 🔥 TRY HOLE FIRST
-        inside = self.try_place_inside(part, placed)
+        inside = self.try_hole(part, placed)
         if inside:
             return inside
 
         best = None
         best_score = float('inf')
 
-        rotations = self.generate_rotations(part)
-        candidates = self.get_candidates(placed)
+        for r in self.generate_rotations(part):
+            for p in placed + [None]:
 
-        for r in rotations:
-            for cx, cy in candidates:
+                x = self.margin if p is None else p.bounds[2]
+                y = self.margin if p is None else p.bounds[3]
 
-                trial = translate(r, cx, cy)
+                trial = translate(r, x, y)
 
-                if not self.no_fit_check(trial, placed):
+                if not self.no_fit(trial, placed):
                     continue
 
-                score = trial.bounds[1] + trial.bounds[0] * 0.1 + random.random() * 2
+                score = trial.bounds[1] + trial.bounds[0]
 
                 if score < best_score:
                     best = trial
@@ -103,18 +75,14 @@ class ProNester:
 
         return best
 
-    # ---------- BUILD ----------
-    def build_layout(self, parts):
+    def build(self, parts):
 
-        parts = parts.copy()
-
-        parts.sort(key=lambda p: p.area * random.uniform(0.8, 1.2), reverse=True)
-        parts = [p.buffer(self.gap / 2) for p in parts]
+        parts = sorted(parts, key=lambda p: -p.area)
 
         placed = []
 
         for part in parts:
-            pos = self.place_part(part, placed)
+            pos = self.place(part, placed)
 
             if pos:
                 placed.append(pos)
@@ -123,67 +91,41 @@ class ProNester:
 
         return placed
 
-    # ---------- FITNESS ----------
-    def evaluate(self, layout, sheet_w=None, sheet_h=None):
+    def evaluate(self, layout, W=None, H=None):
 
         union = unary_union(layout)
         minx, miny, maxx, maxy = union.bounds
 
-        W = sheet_w if sheet_w else maxx + self.margin
-        H = sheet_h if sheet_h else maxy + self.margin
+        W = W or maxx + self.margin
+        H = H or maxy + self.margin
 
-        total_area = sum(p.area for p in layout)
-        util = (total_area / (W * H)) * 100
+        area = sum(p.area for p in layout)
+        util = area / (W * H) * 100
 
-        return {
-            "layout": layout,
-            "W": W,
-            "H": H,
-            "util": util
-        }
+        return {"layout": layout, "W": W, "H": H, "util": util}
 
-    # ---------- GA ----------
-    def nest(self, parts, sheet_w=None, sheet_h=None, return_all=False):
+    def nest(self, parts, W=None, H=None, return_all=False):
 
-        population = [self.build_layout(parts) for _ in range(self.population_size)]
+        pop = [self.build(parts) for _ in range(self.population_size)]
 
         history = []
 
         for _ in range(self.generations):
 
-            scored = [self.evaluate(p, sheet_w, sheet_h) for p in population]
+            scored = [self.evaluate(p, W, H) for p in pop]
             scored.sort(key=lambda x: -x["util"])
 
-            survivors = scored[:max(2, int(self.population_size * 0.4))]
-            new_population = [s["layout"] for s in survivors]
+            survivors = scored[:max(2, len(scored)//2)]
 
-            while len(new_population) < self.population_size:
+            new_pop = [s["layout"] for s in survivors]
 
-                parent = random.choice(survivors)["layout"]
+            while len(new_pop) < self.population_size:
+                child = self.build(parts)
+                new_pop.append(child)
 
-                child = self.build_layout(parts)
-
-                # mutation
-                if random.random() < self.mutation_rate:
-                    child = [rotate(p, random.randint(0, 360), origin='centroid') for p in child]
-
-                new_population.append(child)
-
-            population = new_population
+            pop = new_pop
             history.extend(scored)
 
-        final = [self.evaluate(p, sheet_w, sheet_h) for p in population]
-        final.sort(key=lambda x: -x["util"])
+        best = max(history, key=lambda x: x["util"])
 
-        best = final[0]
-
-        unique = []
-        seen = set()
-
-        for r in history:
-            key = round(r["util"], 2)
-            if key not in seen:
-                seen.add(key)
-                unique.append(r)
-
-        return (best, unique[:10]) if return_all else best
+        return (best, history[:10]) if return_all else best
