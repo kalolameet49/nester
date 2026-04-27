@@ -1,156 +1,189 @@
 import random
-from shapely.affinity import translate, rotate
+from shapely.affinity import rotate, translate
 from shapely.ops import unary_union
+from shapely.geometry import Polygon
+
 
 class ProNester:
 
-    def __init__(self, gap=3.0, margin=5.0, rotations=(0, 90, 180, 270), tries=10):
+    def __init__(self, gap=3.0, margin=5.0,
+                 population_size=12,
+                 generations=8,
+                 mutation_rate=0.3):
+
         self.gap = gap
         self.margin = margin
-        self.rotations = rotations
-        self.tries = tries
+        self.population_size = population_size
+        self.generations = generations
+        self.mutation_rate = mutation_rate
 
-    # ---------- helpers ----------
-    def _norm(self, poly):
-        minx, miny, _, _ = poly.bounds
-        return translate(poly, -minx, -miny)
+    # ---------- ROTATIONS ----------
+    def generate_rotations(self, part):
+        angles = [0, 90, 180, 270]
+        angles += [random.randint(0, 360) for _ in range(2)]
 
-    def _rotations(self, poly):
-        res = []
-        for a in self.rotations:
-            r = rotate(poly, a, origin='centroid')
-            res.append(self._norm(r))
-        return res
+        result = []
+        for a in angles:
+            r = rotate(part, a, origin='centroid')
+            minx, miny, _, _ = r.bounds
+            r = translate(r, -minx, -miny)
+            result.append(r)
 
-    def _intersects_any(self, poly, placed):
-        return any(poly.intersects(p) for p in placed)
+        return result
 
-    def _in_sheet(self, poly, sheet_w, sheet_h):
-        if sheet_w is None or sheet_h is None:
-            return True
-        minx, miny, maxx, maxy = poly.bounds
-        return (minx >= 0 and miny >= 0 and maxx <= sheet_w and maxy <= sheet_h)
+    # ---------- NFP APPROX ----------
+    def no_fit_check(self, part, placed):
+        for p in placed:
+            if part.buffer(self.gap).intersects(p):
+                return False
+        return True
 
-    # candidate anchor points (BL corners + origin)
-    def _candidates(self, placed):
-        pts = {(self.margin, self.margin)}
+    # ---------- HOLE NESTING ----------
+    def try_place_inside(self, part, placed):
+
+        for p in placed:
+            if not isinstance(p, Polygon):
+                continue
+
+            holes = list(p.interiors)
+
+            for hole in holes:
+                hole_poly = Polygon(hole)
+
+                if hole_poly.area > part.area * 1.1:
+
+                    moved = translate(part,
+                                      hole_poly.bounds[0],
+                                      hole_poly.bounds[1])
+
+                    if hole_poly.contains(moved):
+                        return moved
+
+        return None
+
+    # ---------- CANDIDATES ----------
+    def get_candidates(self, placed):
+        pts = [(self.margin, self.margin)]
+
         for p in placed:
             minx, miny, maxx, maxy = p.bounds
-            pts.add((maxx + self.gap, miny))  # to the right
-            pts.add((minx, maxy + self.gap))  # above
-        # sort bottom-left preference
-        return sorted(list(pts), key=lambda t: (t[1], t[0]))
+            pts.append((maxx, miny))
+            pts.append((minx, maxy))
 
-    def _place_one(self, poly, placed, sheet_w, sheet_h):
+        random.shuffle(pts)
+        return pts
+
+    # ---------- PLACE ----------
+    def place_part(self, part, placed):
+
+        # 🔥 TRY HOLE FIRST
+        inside = self.try_place_inside(part, placed)
+        if inside:
+            return inside
+
         best = None
-        best_key = (float('inf'), float('inf'))  # (y, x)
+        best_score = float('inf')
 
-        for r in self._rotations(poly):
-            for (cx, cy) in self._candidates(placed):
+        rotations = self.generate_rotations(part)
+        candidates = self.get_candidates(placed)
+
+        for r in rotations:
+            for cx, cy in candidates:
+
                 trial = translate(r, cx, cy)
 
-                if not self._in_sheet(trial, sheet_w, sheet_h):
-                    continue
-                if self._intersects_any(trial, placed):
+                if not self.no_fit_check(trial, placed):
                     continue
 
-                tx, ty, _, _ = trial.bounds
-                key = (ty, tx)  # bottom-left preference
-                if key < best_key:
+                score = trial.bounds[1] + trial.bounds[0] * 0.1 + random.random() * 2
+
+                if score < best_score:
                     best = trial
-                    best_key = key
+                    best_score = score
 
         return best
 
-    # push parts left/down greedily to compact gaps
-    def _compact(self, placed, sheet_w, sheet_h, iters=3):
-        moved = placed[:]
-        for _ in range(iters):
-            # try move each poly left, then down
-            for i, p in enumerate(moved):
-                # move left
-                step = max(self.gap, 1.0)
-                while True:
-                    trial = translate(p, -step, 0)
-                    if not self._in_sheet(trial, sheet_w, sheet_h):
-                        break
-                    if any(trial.intersects(moved[j]) for j in range(len(moved)) if j != i):
-                        break
-                    p = trial
-                # move down
-                while True:
-                    trial = translate(p, 0, -step)
-                    if not self._in_sheet(trial, sheet_w, sheet_h):
-                        break
-                    if any(trial.intersects(moved[j]) for j in range(len(moved)) if j != i):
-                        break
-                    p = trial
+    # ---------- BUILD ----------
+    def build_layout(self, parts):
 
-                moved[i] = p
-        return moved
+        parts = parts.copy()
 
-    def _layout_bounds(self, placed):
-        if not placed:
-            return 0, 0
-        u = unary_union(placed)
-        minx, miny, maxx, maxy = u.bounds
-        return maxx + self.margin, maxy + self.margin
+        parts.sort(key=lambda p: p.area * random.uniform(0.8, 1.2), reverse=True)
+        parts = [p.buffer(self.gap / 2) for p in parts]
 
-    def _utilization(self, parts, W, H):
-        if W == 0 or H == 0:
-            return 0.0
-        total = sum(p.area for p in parts)
-        return (total / (W * H)) * 100.0
+        placed = []
 
-    # ---------- public ----------
+        for part in parts:
+            pos = self.place_part(part, placed)
+
+            if pos:
+                placed.append(pos)
+            else:
+                placed.append(translate(part, self.margin, self.margin))
+
+        return placed
+
+    # ---------- FITNESS ----------
+    def evaluate(self, layout, sheet_w=None, sheet_h=None):
+
+        union = unary_union(layout)
+        minx, miny, maxx, maxy = union.bounds
+
+        W = sheet_w if sheet_w else maxx + self.margin
+        H = sheet_h if sheet_h else maxy + self.margin
+
+        total_area = sum(p.area for p in layout)
+        util = (total_area / (W * H)) * 100
+
+        return {
+            "layout": layout,
+            "W": W,
+            "H": H,
+            "util": util
+        }
+
+    # ---------- GA ----------
     def nest(self, parts, sheet_w=None, sheet_h=None, return_all=False):
-        """
-        parts: list of shapely polygons (mm units)
-        sheet_w, sheet_h: optional constraints (mm)
-        return_all: if True, return all candidate layouts (for "10 layouts" feature)
-        """
 
-        # buffer gap
-        base_parts = [self._norm(p).buffer(self.gap / 2.0) for p in parts]
+        population = [self.build_layout(parts) for _ in range(self.population_size)]
 
-        candidates = []
+        history = []
 
-        for t in range(self.tries):
-            # shuffle to explore different sequences
-            parts_shuffled = base_parts[:]
-            random.shuffle(parts_shuffled)
+        for _ in range(self.generations):
 
-            placed = []
+            scored = [self.evaluate(p, sheet_w, sheet_h) for p in population]
+            scored.sort(key=lambda x: -x["util"])
 
-            for p in parts_shuffled:
-                pos = self._place_one(p, placed, sheet_w, sheet_h)
-                if pos is None:
-                    # fallback: try origin-ish placement
-                    fallback = translate(p, self.margin, self.margin)
-                    if self._in_sheet(fallback, sheet_w, sheet_h) and not self._intersects_any(fallback, placed):
-                        placed.append(fallback)
-                    else:
-                        # if sheet constrained and cannot place, skip (or break)
-                        continue
-                else:
-                    placed.append(pos)
+            survivors = scored[:max(2, int(self.population_size * 0.4))]
+            new_population = [s["layout"] for s in survivors]
 
-            # compaction pass
-            placed = self._compact(placed, sheet_w, sheet_h, iters=3)
+            while len(new_population) < self.population_size:
 
-            W, H = self._layout_bounds(placed)
-            util = self._utilization(base_parts, W, H)
+                parent = random.choice(survivors)["layout"]
 
-            candidates.append({
-                "W": W,
-                "H": H,
-                "layout": placed,
-                "util": util
-            })
+                child = self.build_layout(parts)
 
-        # pick best
-        best = max(candidates, key=lambda x: x["util"]) if candidates else {"W":0,"H":0,"layout":[],"util":0}
+                # mutation
+                if random.random() < self.mutation_rate:
+                    child = [rotate(p, random.randint(0, 360), origin='centroid') for p in child]
 
-        if return_all:
-            return best, candidates
-        return best["W"], best["H"], best["layout"], best["util"]
+                new_population.append(child)
+
+            population = new_population
+            history.extend(scored)
+
+        final = [self.evaluate(p, sheet_w, sheet_h) for p in population]
+        final.sort(key=lambda x: -x["util"])
+
+        best = final[0]
+
+        unique = []
+        seen = set()
+
+        for r in history:
+            key = round(r["util"], 2)
+            if key not in seen:
+                seen.add(key)
+                unique.append(r)
+
+        return (best, unique[:10]) if return_all else best
