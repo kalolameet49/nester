@@ -1,13 +1,8 @@
 import streamlit as st
-from login_ui import login_page
-from dashboard_ui import dashboard_page
+from nesting_ui import nesting_ui
 
-st.set_page_config(page_title="ProNester SaaS", layout="wide")
+st.set_page_config(page_title="ProNester Industrial", layout="wide")
 
-if "user" not in st.session_state:
-    st.session_state.user = None
+st.title("⚙️ ProNester – Industrial Nesting")
 
-if not st.session_state.user:
-    login_page()
-else:
-    dashboard_page()
+nesting_ui()
