@@ -1,2 +1,6 @@
 streamlit
-pandas
+ezdxf
+shapely
+matplotlib
+svgelements
+numpy
