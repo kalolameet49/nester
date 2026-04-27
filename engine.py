@@ -1,8 +1,4 @@
-import random
-from multiprocessing import Pool, cpu_count
-
-from shapely.affinity import translate
-
+from multiprocessing import Pool
 from placement import place_part
 from evaluator import evaluate
 from evolution import select, mutate
@@ -29,21 +25,15 @@ class ProNester:
 
         for part in parts:
             pos = place_part(part, placed, self.gap, self.margin)
-
             if pos:
                 placed.append(pos)
-            else:
-                placed.append(translate(part, self.margin, self.margin))
 
         return placed
 
-    def parallel_build(self, parts):
-        return self.build_layout(parts)
+    def nest(self, parts, sheet_w, sheet_h, return_all=False):
 
-    def nest(self, parts, sheet_w=2440, sheet_h=1220, return_all=False):
-
-        with Pool(min(cpu_count(), 4)) as pool:
-            population = pool.map(self.parallel_build, [parts]*self.population_size)
+        with Pool(2) as pool:
+            population = pool.map(self.build_layout, [parts]*self.population_size)
 
         history = []
 
@@ -64,8 +54,10 @@ class ProNester:
 
         best = max(history, key=lambda x: x["util"])
 
-        sheets = split_into_sheets(best["layout"], sheet_w, sheet_h, self.margin)
-
-        best["sheets"] = sheets
+        best["sheets"] = split_into_sheets(best["layout"], sheet_w, sheet_h, self.margin)
 
         return (best, history[:10]) if return_all else best
+
+
+if __name__ == "__main__":
+    pass
