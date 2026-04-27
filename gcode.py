@@ -1,8 +1,6 @@
 def generate_gcode(layout):
 
-    lines = []
-    lines.append("G21 ; mm mode")
-    lines.append("G90 ; absolute")
+    lines = ["G21", "G90"]
 
     for poly in layout:
         coords = list(poly.exterior.coords)
@@ -15,7 +13,5 @@ def generate_gcode(layout):
 
         for x, y in coords[1:]:
             lines.append(f"G1 X{x:.2f} Y{y:.2f}")
-
-        lines.append("G0")
 
     return "\n".join(lines)
