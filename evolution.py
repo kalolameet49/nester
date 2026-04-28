@@ -1,32 +1,33 @@
-from shapely.ops import unary_union
+import random
+from shapely.affinity import translate
 
 
-def evaluate(layout, margin, sheet_w, sheet_h):
+def select(population, retain=0.5):
     """
-    Evaluate nesting layout efficiency
+    Select top-performing layouts
     """
+    if not population:
+        return []
 
-    if not layout:
-        return {
-            "layout": [],
-            "util": 0,
-            "W": sheet_w,
-            "H": sheet_h
-        }
+    population = sorted(population, key=lambda x: x["util"], reverse=True)
 
-    try:
-        union = unary_union(layout)
-        used_area = union.area
-    except:
-        used_area = sum(p.area for p in layout)
+    retain_length = max(1, int(len(population) * retain))
+    return population[:retain_length]
 
-    sheet_area = sheet_w * sheet_h
 
-    utilization = (used_area / sheet_area) * 100 if sheet_area else 0
+def mutate(layout, mutation_rate=0.2):
+    """
+    Mutate layout slightly
+    """
+    new_layout = []
 
-    return {
-        "layout": layout,
-        "util": utilization,
-        "W": sheet_w,
-        "H": sheet_h
-    }
+    for part in layout:
+        if random.random() < mutation_rate:
+            dx = random.uniform(-5, 5)
+            dy = random.uniform(-5, 5)
+            moved = translate(part, xoff=dx, yoff=dy)
+            new_layout.append(moved)
+        else:
+            new_layout.append(part)
+
+    return new_layout
