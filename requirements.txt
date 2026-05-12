@@ -8,3 +8,4 @@ pyclipper
 svgpathtools
 matplotlib
 pandas
+reportlab
