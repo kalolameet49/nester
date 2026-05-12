@@ -1,43 +1,60 @@
 import math
-
 from svgpathtools import svg2paths
 
-DENSITY = {
-
-"MS": 7850,
-
-"SS": 8000
-
-}
 
 def read_svg_area(uploaded_file):
 
-paths, attributes = svg2paths(uploaded_file) total_area = 0
+    uploaded_file.seek(0)
 
-for p in paths:
+    paths, attributes = svg2paths(uploaded_file)
 
-xmin, xmax, ymin, ymax = p.bbox()
+    total_area = 0
 
-area = abs((xmax - xmin) * (ymax - ymin))
+    for p in paths:
 
-total_area += area
+        xmin, xmax, ymin, ymax = p.bbox()
 
-return total_area
+        width = abs(xmax - xmin)
+        height = abs(ymax - ymin)
 
-def calculate_weight(area_mm2, thickness_mm, material):
+        total_area += width * height
 
-density = DENSITY[material]
+    return total_area
 
-volume_m3 = (area_mm2 * thickness_mm) / 1e9
 
-weight = volume_m3 * density
+def simple_nesting_layout(
+    sheet_w,
+    sheet_h,
+    part_w,
+    part_h,
+    qty,
+    gap=10
+):
 
-return weight
+    positions = []
 
-def sheet_utilization(part_area, sheet_area):
+    cols = int(sheet_w // (part_w + gap))
 
-util = (part_area / sheet_area) * 100
+    rows = int(sheet_h // (part_h + gap))
 
-scrap = 100 - util
+    max_parts = cols * rows
 
-return util, scrap
+    placed = min(qty, max_parts)
+
+    count = 0
+
+    for r in range(rows):
+
+        for c in range(cols):
+
+            if count >= placed:
+                break
+
+            x = c * (part_w + gap)
+            y = r * (part_h + gap)
+
+            positions.append((x, y))
+
+            count += 1
+
+    return positions, placed
