@@ -1,7 +1,9 @@
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
+
 from svgpathtools import svg2paths
+from svg_visualizer import visualize_svg
 
 st.set_page_config(page_title="ProNester", layout="wide")
 
@@ -13,6 +15,8 @@ st.title("⚙️ ProNester Industrial Suite")
 # =====================================================
 
 def read_svg_area(uploaded_file):
+
+    uploaded_file.seek(0)
 
     paths, attributes = svg2paths(uploaded_file)
 
@@ -72,6 +76,12 @@ if menu == "Weight Calculator":
 
     if svg_file:
 
+        fig = visualize_svg(svg_file)
+
+        st.pyplot(fig)
+
+        svg_file.seek(0)
+
         area = read_svg_area(svg_file)
 
         density = 7850 if material == "MS" else 8000
@@ -115,6 +125,12 @@ elif menu == "Custom Sheet Nesting":
 
     if svg_file:
 
+        fig = visualize_svg(svg_file)
+
+        st.pyplot(fig)
+
+        svg_file.seek(0)
+
         part_area = read_svg_area(svg_file)
 
         total_area = part_area * qty
@@ -131,9 +147,7 @@ elif menu == "Custom Sheet Nesting":
 
         st.success(f"Scrap: {scrap:.2f}%")
 
-        # SIMPLE VISUAL
-
-        fig, ax = plt.subplots(figsize=(10, 5))
+        fig2, ax = plt.subplots(figsize=(10, 5))
 
         rect = plt.Rectangle(
             (0, 0),
@@ -151,7 +165,7 @@ elif menu == "Custom Sheet Nesting":
 
         ax.set_title("Sheet Layout Preview")
 
-        st.pyplot(fig)
+        st.pyplot(fig2)
 
 
 # =====================================================
@@ -179,6 +193,12 @@ elif menu == "Auto Sheet Selection":
     ]
 
     if svg_file:
+
+        fig = visualize_svg(svg_file)
+
+        st.pyplot(fig)
+
+        svg_file.seek(0)
 
         area = read_svg_area(svg_file)
 
@@ -299,6 +319,12 @@ elif menu == "Time Estimator":
     )
 
     if svg_file:
+
+        fig = visualize_svg(svg_file)
+
+        st.pyplot(fig)
+
+        svg_file.seek(0)
 
         area = read_svg_area(svg_file)
 
