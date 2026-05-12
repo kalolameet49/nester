@@ -35,11 +35,13 @@ def nesting_page():
     )
 
     gap = st.number_input(
-        "Gap",
+        "Gap Between Parts",
         value=10
     )
 
     if svg_file:
+
+        # SVG PREVIEW
 
         fig_svg = visualize_svg(svg_file)
 
@@ -47,9 +49,18 @@ def nesting_page():
 
         area = read_svg_area(svg_file)
 
+        # APPROX PART SIZE
+
         part_w = math.sqrt(area)
 
         part_h = math.sqrt(area)
+
+        st.info(
+            f"Approx Part Size: "
+            f"{part_w:.1f} x {part_h:.1f} mm"
+        )
+
+        # RUN NESTING BUTTON
 
         if st.button("🚀 Run Nesting"):
 
@@ -68,6 +79,8 @@ def nesting_page():
                 (sheet_w * sheet_h)
             ) * 100
 
+            scrap = 100 - utilization
+
             st.success(
                 f"Placed Parts: {placed}"
             )
@@ -75,6 +88,12 @@ def nesting_page():
             st.success(
                 f"Utilization: {utilization:.2f}%"
             )
+
+            st.success(
+                f"Scrap: {scrap:.2f}%"
+            )
+
+            # DRAW SHEET
 
             fig, ax = plt.subplots(
                 figsize=(12, 6)
@@ -89,6 +108,8 @@ def nesting_page():
             )
 
             ax.add_patch(sheet)
+
+            # DRAW PARTS
 
             for x, y in positions:
 
@@ -108,5 +129,7 @@ def nesting_page():
             ax.set_aspect('equal')
 
             ax.invert_yaxis()
+
+            ax.set_title("Nesting Layout")
 
             st.pyplot(fig)
