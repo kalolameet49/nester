@@ -1,43 +1,63 @@
 import streamlit as st
 
 from utils import read_svg_area
+from svg_visualizer import visualize_svg
 
-STANDARD_SHEETS = [
-
-(2440, 1220),
-
-(3000, 1500),
-
-(6000, 1500)
-
-]
 
 def auto_sheet_page():
 
-st.header(" Auto Sheet Selection")
+    st.header("🤖 Auto Sheet Selection")
 
-svg_file = st.file_uploader("Upload SVG", type=["svg"])
+    svg_file = st.file_uploader(
+        "Upload SVG",
+        type=["svg"]
+    )
 
-if svg_file:
+    qty = st.number_input(
+        "Quantity",
+        value=10
+    )
 
-area = read_svg_area(svg_file)
+    sheets = [
+        (2440, 1220),
+        (3000, 1500),
+        (6000, 1500)
+    ]
 
-best = None
+    if svg_file:
 
-for w, h in STANDARD_SHEETS:
+        fig = visualize_svg(svg_file)
 
-sheet_area = w * h
+        st.pyplot(fig)
 
-util = (area / sheet_area) * 100
+        area = read_svg_area(svg_file)
 
-if util < 100:
+        total_area = area * qty
 
-if best is None or util > best[2]:
+        best = None
 
-best = (w, h, util)
+        for w, h in sheets:
 
-if best:
+            util = (
+                total_area
+                /
+                (w * h)
+            ) * 100
 
-st.success(f"Recommended Sheet: {best[0]} x {best[1]}")
+            if util <= 100:
 
-st.success(f"Utilization: {best[2]:.2f}%")
+                if best is None or util > best[2]:
+
+                    best = (w, h, util)
+
+        if best:
+
+            st.success(
+                f"Recommended Sheet: "
+                f"{best[0]} x {best[1]}"
+            )
+
+            st.success(
+                f"Utilization: "
+                f"{best[2]:.2f}%"
+            )
