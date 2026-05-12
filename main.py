@@ -1,10 +1,38 @@
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
+from svgpathtools import svg2paths
 
 st.set_page_config(page_title="ProNester", layout="wide")
 
 st.title("⚙️ ProNester Industrial Suite")
+
+
+# =====================================================
+# SVG AREA READER
+# =====================================================
+
+def read_svg_area(uploaded_file):
+
+    paths, attributes = svg2paths(uploaded_file)
+
+    total_area = 0
+
+    for p in paths:
+
+        xmin, xmax, ymin, ymax = p.bbox()
+
+        width = abs(xmax - xmin)
+        height = abs(ymax - ymin)
+
+        total_area += width * height
+
+    return total_area
+
+
+# =====================================================
+# SIDEBAR
+# =====================================================
 
 menu = st.sidebar.radio(
     "Select Module",
@@ -17,151 +45,277 @@ menu = st.sidebar.radio(
     ]
 )
 
-# -------------------------
-# Weight Calculator
-# -------------------------
+# =====================================================
+# 1. WEIGHT CALCULATOR
+# =====================================================
 
 if menu == "Weight Calculator":
 
-    st.header("⚖️ Weight Calculator")
+    st.header("⚖️ SVG Weight Calculator")
+
+    svg_file = st.file_uploader(
+        "Upload SVG File",
+        type=["svg"]
+    )
 
     material = st.selectbox("Material", ["MS", "SS"])
 
-    thickness = st.number_input("Thickness (mm)", value=5.0)
+    thickness = st.number_input(
+        "Thickness (mm)",
+        value=5.0
+    )
 
-    width = st.number_input("Width (mm)", value=1000.0)
+    qty = st.number_input(
+        "Quantity",
+        value=1
+    )
 
-    height = st.number_input("Height (mm)", value=1000.0)
+    if svg_file:
 
-    qty = st.number_input("Quantity", value=1)
+        area = read_svg_area(svg_file)
 
-    density = 7850 if material == "MS" else 8000
+        density = 7850 if material == "MS" else 8000
 
-    volume = (width * height * thickness * qty) / 1e9
+        volume = (area * thickness * qty) / 1e9
 
-    weight = volume * density
+        weight = volume * density
 
-    st.success(f"Estimated Weight: {weight:.2f} kg")
+        st.success(f"SVG Area: {area:.2f} mm²")
+
+        st.success(f"Estimated Weight: {weight:.2f} kg")
 
 
-# -------------------------
-# Custom Nesting
-# -------------------------
+# =====================================================
+# 2. CUSTOM SHEET NESTING
+# =====================================================
 
 elif menu == "Custom Sheet Nesting":
 
     st.header("📐 Custom Sheet Nesting")
 
-    sheet_w = st.number_input("Sheet Width", value=2440)
+    svg_file = st.file_uploader(
+        "Upload SVG File",
+        type=["svg"]
+    )
 
-    sheet_h = st.number_input("Sheet Height", value=1220)
+    sheet_w = st.number_input(
+        "Sheet Width (mm)",
+        value=2440
+    )
 
-    part_w = st.number_input("Part Width", value=200)
+    sheet_h = st.number_input(
+        "Sheet Height (mm)",
+        value=1220
+    )
 
-    part_h = st.number_input("Part Height", value=100)
+    qty = st.number_input(
+        "Part Quantity",
+        value=10
+    )
 
-    qty = st.number_input("Quantity", value=10)
+    if svg_file:
 
-    cols = int(sheet_w // part_w)
+        part_area = read_svg_area(svg_file)
 
-    rows = int(sheet_h // part_h)
+        total_area = part_area * qty
 
-    fit = cols * rows
+        sheet_area = sheet_w * sheet_h
 
-    util = ((part_w * part_h * qty) / (sheet_w * sheet_h)) * 100
+        utilization = (total_area / sheet_area) * 100
 
-    st.success(f"Parts Per Sheet: {fit}")
+        scrap = 100 - utilization
 
-    st.success(f"Utilization: {util:.2f}%")
+        st.success(f"Total Part Area: {total_area:.2f} mm²")
 
-    fig, ax = plt.subplots(figsize=(10, 5))
+        st.success(f"Sheet Utilization: {utilization:.2f}%")
 
-    rect = plt.Rectangle((0, 0), sheet_w, sheet_h, fill=False)
+        st.success(f"Scrap: {scrap:.2f}%")
 
-    ax.add_patch(rect)
+        # SIMPLE VISUAL
 
-    ax.set_xlim(0, sheet_w)
+        fig, ax = plt.subplots(figsize=(10, 5))
 
-    ax.set_ylim(0, sheet_h)
+        rect = plt.Rectangle(
+            (0, 0),
+            sheet_w,
+            sheet_h,
+            fill=False,
+            linewidth=2
+        )
 
-    st.pyplot(fig)
+        ax.add_patch(rect)
+
+        ax.set_xlim(0, sheet_w)
+
+        ax.set_ylim(0, sheet_h)
+
+        ax.set_title("Sheet Layout Preview")
+
+        st.pyplot(fig)
 
 
-# -------------------------
-# Auto Sheet Selection
-# -------------------------
+# =====================================================
+# 3. AUTO SHEET SELECTION
+# =====================================================
 
 elif menu == "Auto Sheet Selection":
 
     st.header("🤖 Auto Sheet Selection")
 
-    area = st.number_input("Required Area mm²", value=1000000)
+    svg_file = st.file_uploader(
+        "Upload SVG File",
+        type=["svg"]
+    )
 
-    sheets = [
+    qty = st.number_input(
+        "Part Quantity",
+        value=10
+    )
+
+    standard_sheets = [
         (2440, 1220),
         (3000, 1500),
         (6000, 1500)
     ]
 
-    best = None
+    if svg_file:
 
-    for w, h in sheets:
+        area = read_svg_area(svg_file)
 
-        util = (area / (w * h)) * 100
+        total_area = area * qty
 
-        if util < 100:
+        best = None
 
-            if best is None or util > best[2]:
-                best = (w, h, util)
+        for w, h in standard_sheets:
 
-    if best:
+            sheet_area = w * h
 
-        st.success(f"Recommended Sheet: {best[0]} x {best[1]}")
+            util = (total_area / sheet_area) * 100
 
-        st.success(f"Utilization: {best[2]:.2f}%")
+            if util <= 100:
+
+                if best is None or util > best[2]:
+
+                    best = (w, h, util)
+
+        if best:
+
+            st.success(
+                f"Recommended Sheet: {best[0]} × {best[1]} mm"
+            )
+
+            st.success(
+                f"Expected Utilization: {best[2]:.2f}%"
+            )
+
+            st.success(
+                f"Expected Scrap: {100 - best[2]:.2f}%"
+            )
+
+        else:
+
+            st.error("Part quantity exceeds standard sheet sizes")
 
 
-# -------------------------
-# Stock Manager
-# -------------------------
+# =====================================================
+# 4. STOCK MANAGER
+# =====================================================
 
 elif menu == "Stock Manager":
 
-    st.header("📦 Stock Manager")
+    st.header("📦 Sheet Stock Manager")
 
-    data = {
-        "Material": ["MS", "SS"],
-        "Thickness": [5, 10],
-        "Width": [2440, 3000],
-        "Height": [1220, 1500],
-        "Qty": [10, 5]
-    }
+    material = st.selectbox(
+        "Material",
+        ["MS", "SS"]
+    )
 
-    df = pd.DataFrame(data)
+    thickness = st.number_input(
+        "Thickness",
+        value=5
+    )
 
-    st.dataframe(df)
+    width = st.number_input(
+        "Sheet Width",
+        value=2440
+    )
+
+    height = st.number_input(
+        "Sheet Height",
+        value=1220
+    )
+
+    qty = st.number_input(
+        "Available Quantity",
+        value=1
+    )
+
+    if st.button("Add Stock"):
+
+        stock = {
+            "Material": material,
+            "Thickness": thickness,
+            "Width": width,
+            "Height": height,
+            "Qty": qty
+        }
+
+        st.success("Stock Added")
+
+        st.write(stock)
 
 
-# -------------------------
-# Time Estimator
-# -------------------------
+# =====================================================
+# 5. TIME ESTIMATOR
+# =====================================================
 
 elif menu == "Time Estimator":
 
     st.header("⏱ Cutting Time Estimator")
 
-    cut_length = st.number_input("Cut Length mm", value=10000)
+    svg_file = st.file_uploader(
+        "Upload SVG File",
+        type=["svg"]
+    )
 
-    speed = st.number_input("Cut Speed mm/min", value=2000)
+    qty = st.number_input(
+        "Part Quantity",
+        value=10
+    )
 
-    pierce = st.number_input("Pierce Count", value=10)
+    cutting_speed = st.number_input(
+        "Cutting Speed mm/min",
+        value=2000
+    )
 
-    pierce_time = st.number_input("Pierce Time sec", value=3)
+    pierce_count = st.number_input(
+        "Pierce Count",
+        value=10
+    )
 
-    cut_time = cut_length / speed
+    pierce_time = st.number_input(
+        "Pierce Time/sec",
+        value=3
+    )
 
-    pierce_total = (pierce * pierce_time) / 60
+    if svg_file:
 
-    total = cut_time + pierce_total
+        area = read_svg_area(svg_file)
 
-    st.success(f"Estimated Time: {total:.2f} min")
+        perimeter = (area ** 0.5) * 4
+
+        total_cut_length = perimeter * qty
+
+        cut_time = total_cut_length / cutting_speed
+
+        pierce_total = (pierce_count * pierce_time) / 60
+
+        total_time = cut_time + pierce_total
+
+        st.success(
+            f"Estimated Cut Length: {total_cut_length:.2f} mm"
+        )
+
+        st.success(
+            f"Estimated Cutting Time: {total_time:.2f} min"
+        )
