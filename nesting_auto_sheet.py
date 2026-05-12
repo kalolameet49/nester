@@ -1,10 +1,12 @@
 import streamlit as st
 import matplotlib.pyplot as plt
-import math
+from matplotlib.patches import Polygon
 
 from utils import (
     read_svg_area,
-    simple_nesting_layout
+    simple_nesting_layout,
+    get_svg_bounds,
+    extract_svg_points
 )
 
 from svg_visualizer import visualize_svg
@@ -12,7 +14,7 @@ from svg_visualizer import visualize_svg
 
 def auto_sheet_page():
 
-    st.header("🤖 Auto Sheet Selection + Nesting")
+    st.header("🤖 Auto SVG Nesting")
 
     svg_file = st.file_uploader(
         "Upload SVG",
@@ -25,11 +27,11 @@ def auto_sheet_page():
     )
 
     gap = st.number_input(
-        "Gap Between Parts",
+        "Gap",
         value=10
     )
 
-    standard_sheets = [
+    sheets = [
         (2440, 1220),
         (3000, 1500),
         (6000, 1500)
@@ -43,13 +45,13 @@ def auto_sheet_page():
 
         area = read_svg_area(svg_file)
 
-        part_w = math.sqrt(area)
+        part_w, part_h = get_svg_bounds(svg_file)
 
-        part_h = math.sqrt(area)
+        shapes = extract_svg_points(svg_file)
 
         best = None
 
-        for w, h in standard_sheets:
+        for w, h in sheets:
 
             util = (
                 (area * qty)
@@ -70,18 +72,6 @@ def auto_sheet_page():
                 f"{best[0]} x {best[1]}"
             )
 
-            st.success(
-                f"Expected Utilization: "
-                f"{best[2]:.2f}%"
-            )
-
-            st.success(
-                f"Expected Scrap: "
-                f"{100 - best[2]:.2f}%"
-            )
-
-            # RUN BUTTON
-
             if st.button("🚀 Run Auto Nesting"):
 
                 positions, placed = simple_nesting_layout(
@@ -93,10 +83,8 @@ def auto_sheet_page():
                     gap
                 )
 
-                # DRAW LAYOUT
-
                 fig, ax = plt.subplots(
-                    figsize=(12, 6)
+                    figsize=(14, 7)
                 )
 
                 sheet = plt.Rectangle(
@@ -109,16 +97,26 @@ def auto_sheet_page():
 
                 ax.add_patch(sheet)
 
-                for x, y in positions:
+                for px, py in positions:
 
-                    rect = plt.Rectangle(
-                        (x, y),
-                        part_w,
-                        part_h,
-                        fill=False
-                    )
+                    for shape in shapes:
 
-                    ax.add_patch(rect)
+                        shifted = []
+
+                        for x, y in shape:
+
+                            shifted.append((
+                                x + px,
+                                y + py
+                            ))
+
+                        poly = Polygon(
+                            shifted,
+                            closed=False,
+                            fill=False
+                        )
+
+                        ax.add_patch(poly)
 
                 ax.set_xlim(0, best[0])
 
@@ -129,11 +127,7 @@ def auto_sheet_page():
                 ax.invert_yaxis()
 
                 ax.set_title(
-                    "Auto Sheet Nesting Layout"
+                    "Auto SVG Nesting Layout"
                 )
 
                 st.pyplot(fig)
-
-                st.success(
-                    f"Placed Parts: {placed}"
-                )
