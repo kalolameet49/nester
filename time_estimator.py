@@ -1,23 +1,43 @@
 import streamlit as st
 
+from utils import read_svg_area
+from svg_visualizer import visualize_svg
+
+
 def time_page():
 
-st.header("⏱ Cutting Time Estimator")
+    st.header("⏱ Time Estimator")
 
-cut_length = st.number_input("Total Cutting Length (mm)", value=10000)
+    svg_file = st.file_uploader(
+        "Upload SVG",
+        type=["svg"]
+    )
 
-cutting_speed = st.number_input("Cutting Speed mm/min", value=2000)
+    qty = st.number_input(
+        "Quantity",
+        value=10
+    )
 
-pierce_count = st.number_input("Pierce Count", value=10)
+    speed = st.number_input(
+        "Cut Speed mm/min",
+        value=2000
+    )
 
-pierce_time = st.number_input("Pierce Time/sec", value=3)
+    if svg_file:
 
-if st.button("Estimate Time"):
+        fig = visualize_svg(svg_file)
 
-cut_time = cut_length / cutting_speed
+        st.pyplot(fig)
 
-pierce_total = (pierce_count * pierce_time) / 60
+        area = read_svg_area(svg_file)
 
-total = cut_time + pierce_total
+        perimeter = (area ** 0.5) * 4
 
-st.success(f"Estimated Cutting Time: {total:.2f} min")
+        total_cut = perimeter * qty
+
+        time = total_cut / speed
+
+        st.success(
+            f"Estimated Time: "
+            f"{time:.2f} min"
+        )
