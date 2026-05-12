@@ -1,39 +1,112 @@
 import streamlit as st
-
 import matplotlib.pyplot as plt
+import math
 
-from utils import read_svg_area, sheet_utilization
+from utils import (
+    read_svg_area,
+    simple_nesting_layout
+)
 
-def custom_nesting_page():
+from svg_visualizer import visualize_svg
 
-st.header(" Custom Sheet Nesting")
 
-svg_file = st.file_uploader("Upload SVG", type=["svg"])
+def nesting_page():
 
-sheet_w = st.number_input("Sheet Width", value=2440)
+    st.header("📐 Industrial Sheet Nesting")
 
-sheet_h = st.number_input("Sheet Height", value=1220)
+    svg_file = st.file_uploader(
+        "Upload SVG",
+        type=["svg"]
+    )
 
-if svg_file:
+    sheet_w = st.number_input(
+        "Sheet Width",
+        value=2440
+    )
 
-part_area = read_svg_area(svg_file)
+    sheet_h = st.number_input(
+        "Sheet Height",
+        value=1220
+    )
 
-sheet_area = sheet_w * sheet_h
+    qty = st.number_input(
+        "Quantity",
+        value=10
+    )
 
-util, scrap = sheet_utilization(part_area, sheet_area)
+    gap = st.number_input(
+        "Gap",
+        value=10
+    )
 
-st.success(f"Utilization: {util:.2f}%")
+    if svg_file:
 
-st.success(f"Scrap: {scrap:.2f}%")
+        fig_svg = visualize_svg(svg_file)
 
-fig, ax = plt.subplots(figsize=(10, 5))
+        st.pyplot(fig_svg)
 
-rect = plt.Rectangle((0, 0), sheet_w, sheet_h, fill=False)
+        area = read_svg_area(svg_file)
 
-ax.add_patch(rect)
+        part_w = math.sqrt(area)
 
-ax.set_xlim(0, sheet_w)
+        part_h = math.sqrt(area)
 
-ax.set_ylim(0, sheet_h)
+        if st.button("🚀 Run Nesting"):
 
-st.pyplot(fig)
+            positions, placed = simple_nesting_layout(
+                sheet_w,
+                sheet_h,
+                part_w,
+                part_h,
+                qty,
+                gap
+            )
+
+            utilization = (
+                (area * placed)
+                /
+                (sheet_w * sheet_h)
+            ) * 100
+
+            st.success(
+                f"Placed Parts: {placed}"
+            )
+
+            st.success(
+                f"Utilization: {utilization:.2f}%"
+            )
+
+            fig, ax = plt.subplots(
+                figsize=(12, 6)
+            )
+
+            sheet = plt.Rectangle(
+                (0, 0),
+                sheet_w,
+                sheet_h,
+                fill=False,
+                linewidth=3
+            )
+
+            ax.add_patch(sheet)
+
+            for x, y in positions:
+
+                rect = plt.Rectangle(
+                    (x, y),
+                    part_w,
+                    part_h,
+                    fill=False
+                )
+
+                ax.add_patch(rect)
+
+            ax.set_xlim(0, sheet_w)
+
+            ax.set_ylim(0, sheet_h)
+
+            ax.set_aspect('equal')
+
+            ax.invert_yaxis()
+
+            st.pyplot(fig)
