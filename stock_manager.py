@@ -1,57 +1,54 @@
 import streamlit as st
-
 import pandas as pd
 
-import json
-
-import os
-
-FILE = "sample_stock.json"
-
-def load_stock():
-
-if not os.path.exists(FILE):
-
-return []
-
-with open(FILE, "r") as f:
-
-return json.load(f)
-
-def save_stock(data):
-
-with open(FILE, "w") as f:
-
-json.dump(data, f)
 
 def stock_page():
 
-st.header(" Sheet Stock Manager")
+    st.header("📦 Stock Manager")
 
-stock = load_stock()
+    if "stock_data" not in st.session_state:
+        st.session_state.stock_data = []
 
-thickness = st.number_input("Thickness", value=5.0)
+    material = st.selectbox(
+        "Material",
+        ["MS", "SS"]
+    )
 
-material = st.selectbox("Material", ["MS", "SS"])
+    thickness = st.number_input(
+        "Thickness",
+        value=5.0
+    )
 
-width = st.number_input("Sheet Width", value=2440)
+    width = st.number_input(
+        "Width",
+        value=2440.0
+    )
 
-height = st.number_input("Sheet Height", value=1220) "material": material,
+    height = st.number_input(
+        "Height",
+        value=1220.0
+    )
 
-"thickness": thickness,
+    qty = st.number_input(
+        "Qty",
+        value=1
+    )
 
-"width": width,
+    if st.button("Add Stock"):
 
-"height": height,
+        st.session_state.stock_data.append({
 
-"qty": qty
+            "Material": material,
+            "Thickness": thickness,
+            "Width": width,
+            "Height": height,
+            "Qty": qty
+        })
 
-})
+    if st.session_state.stock_data:
 
-save_stock(stock)
+        df = pd.DataFrame(
+            st.session_state.stock_data
+        )
 
-if stock:
-
-df = pd.DataFrame(stock)
-
-st.dataframe(df)
+        st.dataframe(df)
